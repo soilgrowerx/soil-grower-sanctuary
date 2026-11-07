@@ -13,6 +13,11 @@ import {
   importFieldStateFromSeed,
   mergeVisitingAction,
 } from '../src/simulation/coop.ts';
+import {
+  createDefaultSoilState as createSubsurfaceState,
+  performGestureVerb as performSubsurfaceVerb,
+  sumHorizonCarbonKg as sumSubsurfaceCarbonKg,
+} from '../src/lib/soil/model.js';
 import type { RainEvent } from '../src/simulation/types.ts';
 
 describe('Pass 1: Infiltration, Runoff, Three Verbs, and Mass-Balance Reconciliation', () => {
@@ -165,6 +170,41 @@ describe('Pass 1: Infiltration, Runoff, Three Verbs, and Mass-Balance Reconcilia
     const result = mergeVisitingAction(hostState, visitorAction);
     assert.ok(result.state.horizons.O.depthMm > initialMulch, 'Visitor added mulch depth');
     assert.equal(result.state.auditLog[0].stewardId, 'anon-steward-nebula-9');
+  });
+
+  test('Unified subsurface model: Biochar, Kelp/Humic Biostimulant, Compost Tea, and Synthetic N-P-K salt dynamics reconcile', () => {
+    let s = createSubsurfaceState('rogue_valley');
+    assert.equal(s.biology.tardigradeState, 'tun', 'Starts with dormant tardigrade tuns in crusted dirt');
+
+    // 1. Apply Pre-Charged Biochar
+    s = performSubsurfaceVerb(s, 'feed', 'biochar').state;
+    assert.ok(s.biology.biocharCarbonFraction > 0.3, 'Biochar locks porous carbon matrix into A horizon');
+    assert.equal(s.biology.tardigradeState, 'active', 'Biochar + moisture wakes tardigrades');
+
+    // 2. Apply Kelp & Humic Biostimulant
+    const prevArbuscules = s.biology.arbusculeDensity;
+    s = performSubsurfaceVerb(s, 'feed', 'biostimulant').state;
+    assert.ok(s.biology.arbusculeDensity > prevArbuscules, 'Biostimulant blooms intracellular AMF arbuscules');
+    assert.ok(s.biology.rootExudateFlux > 0.5, 'Biostimulant surges liquid-carbon root exudates');
+
+    // 3. Stress test with Synthetic N-P-K salt
+    s = performSubsurfaceVerb(s, 'disturb', 'npk').state;
+    assert.equal(s.biology.tardigradeState, 'tun', 'Salt shock drives tardigrades back into cryptobiotic tuns');
+    assert.ok(s.biology.rootExudateFlux < 0.25, 'Free soluble N-P-K causes plant roots to shut off sugar exudates to AMF');
+
+    // Verify water and carbon conservation
+    const waterOut = Number((s.water.totalInfiltratedMm + s.water.runoffVolumeMm).toFixed(2));
+    assert.equal(s.water.totalWaterInMm, waterOut, 'Subsurface water in equals infiltrated + shed');
+
+    const expectedCarbon = Number(
+      (
+        s.carbon.initialTotalCarbonKg +
+        s.carbon.totalCarbonGainedKg -
+        s.carbon.fluxToAtmosphereKg -
+        s.carbon.lossOffPlotKg
+      ).toFixed(3)
+    );
+    assert.equal(expectedCarbon, sumSubsurfaceCarbonKg(s.carbon.poolByHorizonKg), 'Subsurface carbon pool reconciles');
   });
 
 });
