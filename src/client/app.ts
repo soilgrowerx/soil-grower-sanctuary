@@ -1,14 +1,13 @@
 import { createDefaultSoilState, tick } from '../simulation/soilModel.ts';
 import { exportFieldStateToSeed, importFieldStateFromSeed, mergeVisitingAction } from '../simulation/coop.ts';
-import type { SoilState, ManagementAction, RainEvent } from '../simulation/types.ts';
+import type { SoilSimulationState, ManagementAction, RainEvent } from '../simulation/types.ts';
 
 // State management
-let state: SoilState = loadInitialState();
+let state: SoilSimulationState = loadInitialState();
 let isAutoPlaying = false;
 let autoPlayTimer: number | null = null;
 
-function loadInitialState(): SoilState {
-  // Check URL seed parameter first
+function loadInitialState(): SoilSimulationState {
   const params = new URLSearchParams(window.location.search);
   const seedParam = params.get('seed');
   if (seedParam) {
@@ -19,7 +18,6 @@ function loadInitialState(): SoilState {
     }
   }
 
-  // Check localStorage
   const saved = localStorage.getItem('soil_grower_state');
   if (saved) {
     try {
@@ -61,18 +59,16 @@ function render() {
 
   ctx.clearRect(0, 0, width, height);
 
-  // Background Sky / Atmosphere
+  // Atmosphere
   const skyGrad = ctx.createLinearGradient(0, 0, 0, 100);
   skyGrad.addColorStop(0, '#101712');
   skyGrad.addColorStop(1, '#1b241d');
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, width, 100);
 
-  // Soil Horizon Depths
   const horizonTop = 100;
   const soilHeight = height - horizonTop;
 
-  // Horizon boundaries proportioned to actual depth
   const oH = Math.max(12, Math.min(30, state.horizons.O.depthMm * 0.5));
   const aH = 65;
   const eH = 40;
@@ -86,17 +82,12 @@ function render() {
     const col = state.columns[i];
     const x = i * colWidth;
 
-    // Horizon O (Organic Mulch Layer)
+    // Horizon O
     ctx.fillStyle = col.mulchDepthMm > 15 ? '#5c432d' : '#3d2d1f';
     ctx.fillRect(x, horizonTop, colWidth - 1, oH);
 
-    // Horizon A (Topsoil Root Zone)
-    // Darker if uncompacted and high organic carbon
-    if (col.aHorizonCompacted) {
-      ctx.fillStyle = '#261e18'; // Pale degraded hardpan
-    } else {
-      ctx.fillStyle = '#18120d'; // Rich biologically active topsoil
-    }
+    // Horizon A
+    ctx.fillStyle = col.aHorizonCompacted ? '#261e18' : '#18120d';
     ctx.fillRect(x, horizonTop + oH, colWidth - 1, aH);
 
     // Surface Crust Indicator
@@ -106,15 +97,15 @@ function render() {
       ctx.fillRect(x, horizonTop + oH, colWidth - 1, crustH);
     }
 
-    // Horizon E (Eluviated Mineral Zone)
+    // Horizon E
     ctx.fillStyle = '#7a6a57';
     ctx.fillRect(x, horizonTop + oH + aH, colWidth - 1, eH);
 
-    // Horizon B (Subsoil Illuvial Clay Bank)
+    // Horizon B
     ctx.fillStyle = '#543325';
     ctx.fillRect(x, horizonTop + oH + aH + eH, colWidth - 1, bH);
 
-    // Horizon C (Parent Bedrock Substrate)
+    // Horizon C
     ctx.fillStyle = '#383431';
     ctx.fillRect(x, horizonTop + oH + aH + eH + bH, colWidth - 1, Math.max(0, cH));
 
@@ -150,7 +141,7 @@ function render() {
     }
   }
 
-  // Render Plants & Canopies
+  // Render Plants
   for (const plant of state.plants) {
     if (!plant.isAlive) continue;
     const colIdx = plant.columnIndex ?? 4;
@@ -158,21 +149,17 @@ function render() {
     const groundY = horizonTop;
 
     if (plant.species === 'climax_tree') {
-      // Climax Tree (Nurse Tree or Mature)
       const trunkH = plant.donorPriority > 0.5 ? 55 : 30;
       const crownR = plant.donorPriority > 0.5 ? 32 : 18;
 
-      // Trunk
       ctx.fillStyle = '#4a2f1c';
       ctx.fillRect(px - 3, groundY - trunkH, 6, trunkH);
 
-      // Canopy
       ctx.fillStyle = plant.donorPriority > 0.5 ? '#2f7a4d' : '#389e65';
       ctx.beginPath();
       ctx.arc(px, groundY - trunkH - crownR * 0.5, crownR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Deep Taproot into B horizon
       ctx.strokeStyle = '#5a3d28';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -180,7 +167,6 @@ function render() {
       ctx.lineTo(px, groundY + oH + aH + eH + 30);
       ctx.stroke();
     } else {
-      // Herb / Perennial Seedling
       ctx.fillStyle = '#48bb78';
       ctx.beginPath();
       ctx.arc(px, groundY - 12, 10, 0, Math.PI * 2);
@@ -195,7 +181,7 @@ function render() {
     }
   }
 
-  // Horizon Labels on Left Edge
+  // Horizon Labels
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ctx.font = '10px sans-serif';
   ctx.fillText('O: Organic Mulch', 6, horizonTop + 10);
@@ -207,25 +193,26 @@ function render() {
 
 // UI Updating
 function updateUI() {
-  // Season & Day
-  document.getElementById('hudDay')!.textContent = `Day ${state.day} / 90`;
+  document.getElementById('hudDay')!.textContent = `Day ${state.season.dayIndex} / 90`;
+  const day = state.season.dayIndex;
   const seasonPhase =
-    state.day < 20
+    day < 20
       ? 'Spring Wakeup'
-      : state.day < 45
+      : day < 45
       ? 'Early Summer Canopy'
-      : state.day < 70
+      : day < 70
       ? 'Midsummer Heat Dome'
-      : 'Autumn Fungal Flush';
+      : 'Autumn Inoculation';
   document.getElementById('hudSeason')!.textContent = seasonPhase;
 
   // Microbial F:B Ratio
-  const fb = state.microbial.fbRatio;
+  const fb = state.biology.fungalToBacterialRatio;
   document.getElementById('meterFbRatio')!.textContent = fb.toFixed(2);
   const fbPercent = Math.min(100, (fb / 4.0) * 100);
   const fbBar = document.getElementById('meterFbBar')!;
   fbBar.style.width = `${fbPercent}%`;
-  fbBar.style.backgroundColor = fb >= 3.0 ? '#48bb78' : fb >= 1.2 ? '#9f7aea' : fb >= 0.4 ? '#e5b358' : '#e53e3e';
+  fbBar.style.backgroundColor =
+    fb >= 3.0 ? '#48bb78' : fb >= 1.2 ? '#9f7aea' : fb >= 0.4 ? '#e5b358' : '#e53e3e';
 
   let tierName = 'Bacterial Fill (Ruderal)';
   if (fb >= 3.0) tierName = 'Climax Forest Sanctuary';
@@ -241,15 +228,18 @@ function updateUI() {
   bdBar.style.width = `${bdPercent}%`;
   bdBar.style.backgroundColor = bd > 1.55 ? '#e53e3e' : bd > 1.35 ? '#e5b358' : '#48bb78';
 
-  const crust = state.horizons.A.surfaceCrustThicknessMm || 0;
+  const crust = state.water.crustThicknessMm;
   document.getElementById('meterCrust')!.textContent = `${crust.toFixed(1)} mm`;
 
   // Hydrology
-  const totalInfil = (state.horizons.O.waterContentMm + state.horizons.A.waterContentMm + state.horizons.B.waterContentMm).toFixed(0);
-  document.getElementById('meterWaterBank')!.textContent = `${totalInfil} mm`;
-  document.getElementById('meterRunoff')!.textContent = `${state.waterBalance.totalRunoffMm.toFixed(1)} mm`;
+  const totalWater = (
+    state.horizons.O.currentWaterMm +
+    state.horizons.A.currentWaterMm +
+    state.horizons.B.currentWaterMm
+  ).toFixed(0);
+  document.getElementById('meterWaterBank')!.textContent = `${totalWater} mm`;
 
-  // Tripartite Cooperative Ledger
+  // Cooperative Ledger
   const ledger = state.cooperativeLedger;
   document.getElementById('ledgerCredits')!.textContent = `${ledger.carbonBiomassCredits.toFixed(1)} CBC`;
   document.getElementById('ledgerPatronage')!.textContent = `${ledger.mycorrhizalPatronage.toFixed(1)} MP`;
@@ -268,13 +258,15 @@ function updateUI() {
     feed.appendChild(div);
   }
 
-  // Check Failure States & Show Alert Banner
+  // Failure Alerts
   const alertBanner = document.getElementById('alertBanner')!;
-  if (crust > 3.0 && state.waterBalance.totalRunoffMm > 10) {
-    alertBanner.textContent = 'RESTIRATION ALERT: A-horizon kinetic rain crust has sealed surface pores, producing lateral runoff and eroding topsoil carbon. Remediate with AirSpade decompaction and woodchip mulch.';
+  if (state.water.isCrusted && state.water.runoffVolumeMm > 15) {
+    alertBanner.textContent =
+      'RESTORATION ALERT: A-horizon kinetic rain crust has sealed surface pores, producing lateral runoff and eroding topsoil carbon off-plot. Remediate with AirSpade decompaction and woodchip mulch.';
     alertBanner.className = 'alert-banner active';
   } else if (fb < 0.25) {
-    alertBanner.textContent = 'RESTIRATION ALERT: Soil has collapsed to extreme bacterial dominance. Saplings are nutrient-starved. Apply woodchip mulch and aerated fungal tea to restore fungal hyphae.';
+    alertBanner.textContent =
+      'RESTORATION ALERT: Soil has collapsed to extreme bacterial dominance. Saplings are nutrient-starved. Apply woodchip mulch and aerated fungal tea to restore fungal hyphae.';
     alertBanner.className = 'alert-banner active';
   } else {
     alertBanner.className = 'alert-banner';
@@ -284,7 +276,6 @@ function updateUI() {
   persistState();
 }
 
-// Action Dispatcher
 function performAction(actionType: ManagementAction['type'], rainEvent?: RainEvent) {
   const rain = rainEvent || {
     intensityMmPerHour: 2.0,
@@ -301,7 +292,6 @@ function performAction(actionType: ManagementAction['type'], rainEvent?: RainEve
   updateUI();
 }
 
-// Event Listeners
 document.getElementById('btnAirSpade')?.addEventListener('click', () => {
   performAction('air_spade_decompact');
 });
@@ -319,10 +309,11 @@ document.getElementById('btnPlantSeedling')?.addEventListener('click', () => {
 });
 
 document.getElementById('btnCallStorm')?.addEventListener('click', () => {
+  // Two-inch storm pulse (50.8 mm)
   performAction('rest', {
-    intensityMmPerHour: 35.0, // Heavy thunderstorm
+    intensityMmPerHour: 50.8,
     durationHours: 1.0,
-    dropletImpactEnergy: 1.8,
+    dropletImpactEnergy: 2.0,
   });
 });
 
@@ -348,7 +339,7 @@ document.getElementById('btnAutoPlay')?.addEventListener('click', () => {
   if (isAutoPlaying) {
     btn.textContent = 'Pause Season';
     autoPlayTimer = window.setInterval(() => {
-      if (state.day >= 90) {
+      if (state.season.dayIndex >= 90) {
         isAutoPlaying = false;
         clearInterval(autoPlayTimer!);
         btn.textContent = 'Season Finished (Day 90)';
@@ -362,7 +353,6 @@ document.getElementById('btnAutoPlay')?.addEventListener('click', () => {
   }
 });
 
-// Pass C: Accountless Cooperation Link Sharing
 document.getElementById('btnShareLink')?.addEventListener('click', () => {
   const seed = exportFieldStateToSeed(state);
   const shareUrl = `${window.location.origin}${window.location.pathname}?seed=${seed}`;
@@ -392,7 +382,6 @@ document.getElementById('btnResetField')?.addEventListener('click', () => {
   }
 });
 
-// Modals
 document.getElementById('btnOpenHandbook')?.addEventListener('click', () => {
   document.getElementById('handbookModal')?.classList.add('open');
 });
@@ -401,6 +390,5 @@ document.getElementById('btnCloseHandbook')?.addEventListener('click', () => {
   document.getElementById('handbookModal')?.classList.remove('open');
 });
 
-// Initialize
 resizeCanvas();
 updateUI();
