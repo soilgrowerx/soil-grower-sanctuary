@@ -12,9 +12,15 @@
  * Every mechanic reads and writes this model. No mechanic holds private state.
  */
 
-export type HorizonType = 'O' | 'A' | 'E' | 'B' | 'C';
+export type HorizonType = 'O' | 'A' | 'B' | 'E' | 'C';
+
+export type BioregionId = 'rogue_valley' | 'blackland_prairie' | 'willamette_valley' | 'sandhills_nc';
 
 export interface SiteState {
+  bioregionId: BioregionId;
+  bioregionName: string;
+  latitude: number;
+  longitude: number;
   climateZone: string;
   baselineRecordReference: string;
   soilSeries: string;
@@ -42,6 +48,8 @@ export interface BiologyState {
 
 export interface WaterState {
   infiltrationRateMmPerHr: number;
+  totalWaterInMm: number;
+  totalInfiltratedMm: number;
   runoffVolumeMm: number;
   topsoilExportedKg: number;
   crustThicknessMm: number;
@@ -51,8 +59,11 @@ export interface WaterState {
 
 export interface CarbonState {
   poolByHorizonKg: Record<HorizonType, number>;
+  initialTotalCarbonKg: number;
+  totalCarbonGainedKg: number;
   fluxToAtmosphereKg: number;
   lossOffPlotKg: number;
+  currentTotalCarbonKg: number;
 }
 
 export type TillageType = 'none' | 'rototill' | 'chisel_plow' | 'air_spade';
@@ -78,6 +89,12 @@ export interface RainEvent {
 }
 
 export interface SeasonState {
+  seasonNumber: number;
+  decisionsTakenInSeason: number;
+  maxDecisionsPerSeason: number;
+  seasonDurationSec: number;
+  unlockedHorizons: HorizonType[];
+  unlockedFunctionalGroups: ('fungus' | 'plant' | 'invertebrate')[];
   dayIndex: number;
   seasonPhase: 'spring_wakeup' | 'early_summer' | 'midsummer_heat_dome' | 'autumn_inoculation';
   currentRainEvent: RainEvent;
@@ -153,18 +170,26 @@ export interface SoilSimulationState {
 
 export type SoilState = SoilSimulationState;
 
+export type CoreVerb = 'water' | 'feed' | 'disturb';
+export type FeedSubMode = 'mulch' | 'tea' | 'compost';
+export type DisturbSubMode = 'till' | 'graze' | 'harvest';
+
 export type ManagementActionType =
   | 'air_spade_decompact'
   | 'mulch_woodchips'
   | 'inoculate_fungal_tea'
+  | 'compost_humus'
   | 'plant_seedling'
   | 'tillage'
+  | 'graze_heavy'
+  | 'harvest_clear'
   | 'synthetic_npk_buff'
   | 'cut_plant'
   | 'rest';
 
 export interface ManagementAction {
   type: ManagementActionType;
+  verb?: CoreVerb;
   stewardId?: string;
   targetPlantId?: string;
   plantSpecies?: Plant['species'];
@@ -173,6 +198,7 @@ export interface ManagementAction {
 }
 
 export interface InfiltrationRunoffOutput {
+  waterInMm: number;
   waterInfiltratedMm: number;
   waterShedMm: number;
   topsoilCarbonExportedKg: number;
@@ -191,4 +217,5 @@ export interface TickResult {
   crustFormedMm: number;
   fbRatioDelta: number;
   summary: string;
+  headlineOutcome: string;
 }

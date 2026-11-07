@@ -4,15 +4,18 @@ import {
   createDefaultSoilState,
   calculateInfiltrationAndRunoff,
   tick,
+  performGestureVerb,
+  advanceToNextSeason,
+  sumHorizonCarbonKg,
 } from '../src/simulation/soilModel.ts';
 import {
   exportFieldStateToSeed,
   importFieldStateFromSeed,
   mergeVisitingAction,
 } from '../src/simulation/coop.ts';
-import type { RainEvent, SoilSimulationState } from '../src/simulation/types.ts';
+import type { RainEvent } from '../src/simulation/types.ts';
 
-describe('Pass 1: Infiltration and Runoff Physics Engine', () => {
+describe('Pass 1: Infiltration, Runoff, Three Verbs, and Mass-Balance Reconciliation', () => {
 
   test('FAILURE CASE: Crusted, bare, low-aggregate field sheds most of a two-inch rain event and exports carbon', () => {
     const state = createDefaultSoilState();
@@ -27,15 +30,13 @@ describe('Pass 1: Infiltration and Runoff Physics Engine', () => {
 
     // Two-inch rain event (2.0 inches = 50.8 mm)
     const twoInchStorm: RainEvent = {
-      intensityMmPerHour: 50.8, // 1-hour cloudburst
+      intensityMmPerHour: 50.8,
       durationHours: 1.0,
-      dropletImpactEnergy: 2.2, // High kinetic raindrop impact
+      dropletImpactEnergy: 2.2,
     };
 
     const output = calculateInfiltrationAndRunoff(state, twoInchStorm);
 
-    // Assertions required by Pass 1:
-    // 1. Water shed must be greater than water infiltrated (sheds most of the 2-inch event)
     const totalRainMm = 50.8;
     assert.ok(
       output.waterShedMm > totalRainMm * 0.5,
@@ -45,43 +46,33 @@ describe('Pass 1: Infiltration and Runoff Physics Engine', () => {
       output.waterInfiltratedMm < totalRainMm * 0.5,
       `Infiltration must be choked by crust. Infiltrated: ${output.waterInfiltratedMm}mm`
     );
-
-    // 2. Topsoil carbon must be exported off-plot
+    assert.equal(
+      Number((output.waterInfiltratedMm + output.waterShedMm).toFixed(2)),
+      totalRainMm,
+      'Water in must equal water infiltrated plus water shed'
+    );
     assert.ok(
       output.topsoilCarbonExportedKg > 0,
       `Topsoil carbon must be exported by runoff. Exported: ${output.topsoilCarbonExportedKg}kg`
     );
-
-    // 3. Kinetic impact on bare soil forms additional crust
     assert.ok(
       output.crustFormedMm > 0,
       `Kinetic impact must generate additional crust. Formed: ${output.crustFormedMm}mm`
     );
 
-    // Run full tick to verify canonical model state mutation
     const tickResult = tick(state, { type: 'rest' }, twoInchStorm);
-    assert.ok(
-      tickResult.state.carbon.lossOffPlotKg > 0,
-      'State tracks cumulative carbon lost off-plot'
-    );
-    assert.ok(
-      tickResult.state.carbon.poolByHorizonKg.A < initialCarbonPoolA,
-      'A horizon carbon pool is depleted by erosion'
-    );
-    assert.ok(
-      tickResult.state.water.runoffVolumeMm > 25.4,
-      'State water runoff volume records shedding'
-    );
+    assert.ok(tickResult.state.carbon.lossOffPlotKg > 0);
+    assert.ok(tickResult.state.carbon.poolByHorizonKg.A < initialCarbonPoolA);
+    assert.ok(tickResult.state.water.runoffVolumeMm > 25.4);
   });
 
   test('SUCCESS CASE: Decompacted, mulched, high-aggregate field captures two-inch event with zero runoff and zero carbon loss', () => {
     const state = createDefaultSoilState();
 
-    // Remediated state: AirSpaded and mulched with high residue cover
     state.water.crustThicknessMm = 0;
     state.water.isCrusted = false;
-    state.management.residueCoverFraction = 0.85; // 85% woodchip residue cover
-    state.horizons.A.aggregateStability = 0.75;   // High aggregate stability
+    state.management.residueCoverFraction = 0.85;
+    state.horizons.A.aggregateStability = 0.75;
     state.horizons.A.saturatedConductivityMmPerHr = 45.0;
     state.horizons.O.waterHoldingCapacityMm = 24.0;
     state.horizons.O.currentWaterMm = 2.0;
@@ -100,41 +91,50 @@ describe('Pass 1: Infiltration and Runoff Physics Engine', () => {
     assert.equal(output.crustFormedMm, 0, 'Mulch intercepts raindrop kinetic energy, preventing crust');
   });
 
-  test('canonical model adheres to Section 2 structure (all 7 core modules present)', () => {
-    const state = createDefaultSoilState();
+  test('Water in vs water out and carbon gained minus carbon lost reconcile across all three verbs', () => {
+    let state = createDefaultSoilState();
+    assert.equal(state.site.bioregionId, 'rogue_valley', 'Defaults to Rogue Valley bioregion');
 
-    // 1. site
-    assert.ok(state.site.climateZone);
-    assert.ok(state.site.baselineRecordReference);
-    assert.ok(state.site.soilSeries);
+    // Decision 1: Feed (mulch)
+    state = performGestureVerb(state, 'feed', 'mulch').state;
+    // Decision 2: Water (storm)
+    state = performGestureVerb(state, 'water').state;
+    // Decision 3: Disturb (till)
+    state = performGestureVerb(state, 'disturb', 'till').state;
 
-    // 2. horizons (O, A, E, B, C)
-    for (const h of ['O', 'A', 'E', 'B', 'C'] as const) {
-      assert.ok(state.horizons[h], `Horizon ${h} must exist`);
-      assert.ok(state.horizons[h].depthMm > 0);
-      assert.ok(state.horizons[h].bulkDensityGcm3 > 0);
-      assert.ok(state.horizons[h].aggregateStability >= 0);
-    }
+    // Reconcile water: totalWaterInMm === totalInfiltratedMm + runoffVolumeMm
+    const waterOut = Number((state.water.totalInfiltratedMm + state.water.runoffVolumeMm).toFixed(2));
+    assert.equal(state.water.totalWaterInMm, waterOut, 'Water in must balance water out');
 
-    // 3. biology
-    assert.ok(state.biology.fungalToBacterialRatio > 0);
-    assert.ok(state.biology.mycorrhizalColonizationPercent >= 0);
-    assert.ok(state.biology.earthwormActivityIndex >= 0);
+    // Reconcile carbon: initial + gained - (atmosphere + runoff loss) === currentTotalCarbonKg
+    const expectedCarbon = Number(
+      (
+        state.carbon.initialTotalCarbonKg +
+        state.carbon.totalCarbonGainedKg -
+        state.carbon.fluxToAtmosphereKg -
+        state.carbon.lossOffPlotKg
+      ).toFixed(3)
+    );
+    const poolSum = sumHorizonCarbonKg(state.carbon.poolByHorizonKg);
+    assert.equal(state.carbon.currentTotalCarbonKg, poolSum, 'Current total carbon equals sum of horizons');
+    assert.equal(expectedCarbon, poolSum, 'Carbon gained minus carbon lost must reconcile with horizon pools');
+  });
 
-    // 4. water
-    assert.ok(state.water.infiltrationRateMmPerHr >= 0);
-    assert.ok(typeof state.water.isCrusted === 'boolean');
+  test('Season progression unlocks one horizon deeper each season across four seasons', () => {
+    let state = createDefaultSoilState();
+    assert.deepEqual(state.season.unlockedHorizons, ['O', 'A']);
 
-    // 5. carbon
-    assert.ok(state.carbon.poolByHorizonKg.A > 0);
+    state = advanceToNextSeason(state);
+    assert.equal(state.season.seasonNumber, 2);
+    assert.deepEqual(state.season.unlockedHorizons, ['O', 'A', 'E']);
 
-    // 6. management
-    assert.ok(state.management.tillageType);
-    assert.ok(state.management.residueCoverFraction >= 0);
+    state = advanceToNextSeason(state);
+    assert.equal(state.season.seasonNumber, 3);
+    assert.deepEqual(state.season.unlockedHorizons, ['O', 'A', 'E', 'B']);
 
-    // 7. season
-    assert.ok(state.season.dayIndex >= 1);
-    assert.ok(state.season.currentRainEvent.intensityMmPerHour >= 0);
+    state = advanceToNextSeason(state);
+    assert.equal(state.season.seasonNumber, 4);
+    assert.deepEqual(state.season.unlockedHorizons, ['O', 'A', 'E', 'B', 'C']);
   });
 
   test('exports state to URL-safe seed string and restores identically', () => {
