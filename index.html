@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soil Grower: Living Sanctuary Zero</title>
+  <link rel="stylesheet" href="/src/client/styles.css" />
+</head>
+<body>
+  <div class="game-container">
+    <header>
+      <div class="brand">
+        <h1>SOIL GROWER: SANCTUARY ZERO</h1>
+        <div class="sub">Biological Soil Genesis Simulator · Base44 Web Game</div>
+      </div>
+      <div class="hud-season">
+        <div class="hud-badge"><strong id="hudDay">Day 1 / 90</strong></div>
+        <div class="hud-badge"><span id="hudSeason">Spring Wakeup</span></div>
+      </div>
+      <div class="btn-group">
+        <button id="btnAutoPlay">Auto Season</button>
+        <button id="btnNextDay" class="primary">Next Day (Tick)</button>
+        <button id="btnOpenHandbook">Field Handbook</button>
+      </div>
+    </header>
+
+    <main class="layout-split">
+      <div class="viewport-panel">
+        <div id="alertBanner" class="alert-banner"></div>
+
+        <div class="canvas-card">
+          <div class="canvas-header">
+            <span>RHIZOSPHERE VERTICAL PROFILE (16 COLUMNS x 5 HORIZONS)</span>
+            <span id="fbTier">Bacterial Fill (Ruderal)</span>
+          </div>
+          <canvas id="sanctuaryCanvas"></canvas>
+        </div>
+
+        <div class="meters-grid">
+          <div class="meter-card">
+            <h4>Fungal-to-Bacterial (F:B) Ratio</h4>
+            <div class="meter-val" id="meterFbRatio">0.20</div>
+            <div class="meter-bar-container">
+              <div id="meterFbBar" class="meter-bar-fill" style="width: 5%; background-color: #e53e3e;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <h4>A-Horizon Bulk Density</h4>
+            <div class="meter-val" id="meterBulkDensity">1.62 g/cm³</div>
+            <div class="meter-bar-container">
+              <div id="meterBdBar" class="meter-bar-fill" style="width: 75%; background-color: #e53e3e;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <h4>Surface Crust Thickness</h4>
+            <div class="meter-val" id="meterCrust">2.5 mm</div>
+            <div class="sub" style="font-size: 0.75rem; color: #8fa38d;">Kinetic rain seal</div>
+          </div>
+
+          <div class="meter-card">
+            <h4>B-Horizon Water Bank</h4>
+            <div class="meter-val" id="meterWaterBank">88 mm</div>
+            <div class="sub" style="font-size: 0.75rem; color: #8fa38d;">Deep moisture reserve</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-panel">
+        <div class="panel-card">
+          <h3>TEND ACTIONS</h3>
+          <div class="action-buttons">
+            <div class="action-btn-row">
+              <button id="btnAirSpade" class="primary">AirSpade Decompact</button>
+              <span class="action-desc">Shatters crust & pan, lowers bulk density</span>
+            </div>
+            <div class="action-btn-row">
+              <button id="btnMulch">Mulch Woodchips (+35mm)</button>
+              <span class="action-desc">Protects soil, creates sponge, feeds fungi</span>
+            </div>
+            <div class="action-btn-row">
+              <button id="btnFungalTea" class="accent">Inoculate Fungal Tea</button>
+              <span class="action-desc">Boosts F:B ratio, glomalin glue, hyphal links</span>
+            </div>
+            <div class="action-btn-row">
+              <button id="btnPlantSeedling">Plant Seedling Guild</button>
+              <span class="action-desc">Establishes roots into mycorrhizal network</span>
+            </div>
+            <div class="action-btn-row">
+              <button id="btnCallStorm">Call Storm Pulse (35mm Rain)</button>
+              <span class="action-desc">Tests infiltration vs runoff & crusting</span>
+            </div>
+            <div class="action-btn-row" style="margin-top: 0.4rem;">
+              <button id="btnTillage" class="danger">Mechanical Tillage (Test Collapse)</button>
+              <span class="action-desc">Shatters hyphae, collapses aggregates</span>
+            </div>
+            <div class="action-btn-row">
+              <button id="btnNpkBuff" class="danger">Quick N-P-K Buff (Synthetic Trap)</button>
+              <span class="action-desc">Kills 45% fungi, spikes salinity & compaction</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <h3>TRIPARTITE COOPERATIVE LEDGER</h3>
+          <div class="ledger-row">
+            <span>Soil Grower Stake (Producer)</span>
+            <strong id="ledgerGrowerStake">35%</strong>
+          </div>
+          <div class="ledger-row">
+            <span>Land Steward Stake (Sanctuary)</span>
+            <strong id="ledgerLandownerStake">30%</strong>
+          </div>
+          <div class="ledger-row">
+            <span>Player Patronage Stake (Community)</span>
+            <strong id="ledgerPlayerStake">35%</strong>
+          </div>
+          <div class="ledger-row" style="margin-top: 0.5rem; color: var(--accent-gold);">
+            <span>Carbon Biomass Credits</span>
+            <strong id="ledgerCredits">12.5 CBC</strong>
+          </div>
+          <div class="ledger-row" style="color: var(--accent-fungal);">
+            <span>Mycorrhizal Patronage</span>
+            <strong id="ledgerPatronage">5.0 MP</strong>
+          </div>
+          <div class="ledger-row" style="color: var(--accent-green);">
+            <span>Co-op Multiplier</span>
+            <strong id="ledgerMultiplier">1.00x</strong>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <h3>ACCOUNTLESS COOPERATION</h3>
+          <div class="btn-group" style="flex-direction: column; gap: 0.4rem;">
+            <button id="btnShareLink">Copy Sanctuary Share Link</button>
+            <button id="btnVisitingSteward">Simulate Visiting Steward Care</button>
+            <button id="btnResetField" class="danger" style="margin-top: 0.4rem;">Reset to Degraded Lot</button>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <h3>SANCTUARY AUDIT LOG</h3>
+          <div id="auditFeed" class="audit-feed"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Field Handbook & Legal Boundary Modal -->
+    <div id="handbookModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Field Handbook: Sanctuary Zero</h3>
+          <button id="btnCloseHandbook">&times;</button>
+        </div>
+        <div class="modal-body">
+          <h4>The Five Ecological Pillars</h4>
+          <p><strong>1. Vertical Soil Horizons (O, A, E, B, C):</strong> Regenerative arboriculture manages depth, not surface dirt. The O layer absorbs raindrop impact; the A topsoil hosts root-microbe symbiosis; the E layer is the leached zone; the B subsoil holds the deep clay and mineral phosphorus bank; and the C layer is the calcareous parent substrate.</p>
+          <p><strong>2. Fungal-to-Bacterial (F:B) Succession:</strong> Compacted dirt is bacterial (&lt; 0.4). High-lignin woodchips and aerated fungal teas shift succession toward forest ecosystems (&gt; 3.0), unlocking climax canopy trees.</p>
+          <p><strong>3. Mycorrhizal Hyphal Networks:</strong> Living fungal hyphae connect mature nurse trees to young saplings, shuttling photosynthate carbon to understory seedlings.</p>
+          <p><strong>4. Infiltration versus Runoff:</strong> Kinetic raindrop energy shatters bare soil aggregates, forming an impervious surface crust that causes topsoil erosion. Coarse woodchip mulch and AirSpade macropores channel storm water deep into the B-horizon moisture bank.</p>
+          <p><strong>5. Asynchronous Accountless Cooperation:</strong> Players share sanctuary field states via URL-encoded seeds and dispatch care packages across browsers without logins or accounts.</p>
+
+          <h4>The Mars Horizon</h4>
+          <p>Sanctuary Zero forges the Soil Grower Cooperative Standard on Earth. The exact biological equations used here to rebuild compacted clay into living rhizosphere apply directly to closed-loop soil genesis on Martian basaltic regolith.</p>
+
+          <div class="legal-notice">
+            <strong>LEGAL BOUNDARY & CONTEST COMPLIANCE NOTICE:</strong><br />
+            This simulation game operates strictly under non-redeemable, in-game ecological currencies (Carbon Biomass Credits and Mycorrhizal Patronage). There is zero real-money wagering, zero real-money payout, zero cash-out mechanism, and zero monetary consideration. Complies with SEC v. W.J. Howey Co. (1946), Dufoe v. DraftKings Inc. (2024), FinCEN FIN-2019-G001, Base44 Terms of Service Section 4.3, and Internal Revenue Code Subchapter T cooperative principles.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/client/app.ts"></script>
+</body>
+</html>

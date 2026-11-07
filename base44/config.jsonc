@@ -1,0 +1,11 @@
+{
+  "name": "Soil Grower: Sanctuary Zero",
+  "description": "Biological soil genesis browser simulator with vertical soil horizons, F:B succession, mycorrhizal networks, storm infiltration physics, and accountless cooperation.",
+  "visibility": "public",
+  "site": {
+    "installCommand": "npm install",
+    "buildCommand": "npm run build",
+    "serveCommand": "npm run dev",
+    "outputDirectory": "./dist"
+  }
+}
